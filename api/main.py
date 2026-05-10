@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from api.routes import graders
 
 app = FastAPI(
     title="LLM Eval Platform",
@@ -6,7 +7,8 @@ app = FastAPI(
     version="0.1.0"
 )
 
+app.include_router(graders.router)
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "version": "0.1.0"}
-

@@ -3,6 +3,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from api.routes import graders
+from api.routes import jobs
 
 app = FastAPI(
     title="LLM Eval Platform",
@@ -11,6 +12,7 @@ app = FastAPI(
 )
 
 app.include_router(graders.router)
+app.include_router(jobs.router)
 
 @app.get("/health")
 def health_check():

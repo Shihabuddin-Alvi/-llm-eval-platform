@@ -66,3 +66,8 @@ def run_eval(job: EvalJob) -> dict:
     result = grader_fn(job.prediction, job.reference)
     save_job_result(job, result)
     return result
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn

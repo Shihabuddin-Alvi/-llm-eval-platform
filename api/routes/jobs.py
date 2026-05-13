@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from typing import List
 from core.models import EvalJob
 from core.runner import run_eval, get_db_connection
 
@@ -12,6 +13,7 @@ def submit_job(job: EvalJob):
 @router.get("")
 def list_jobs():
     return []
+
 @router.get("/leaderboard")
 def get_leaderboard():
     conn = get_db_connection()
@@ -28,3 +30,16 @@ def get_leaderboard():
     """).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+@router.post("/batch")
+def submit_batch(jobs: List[EvalJob]):
+    return [run_eval(job) for job in jobs]
+
+@router.get("/{job_id}")
+def get_job(job_id: int):
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return dict(row)

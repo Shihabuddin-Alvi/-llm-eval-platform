@@ -1,4 +1,4 @@
-# LLM Eval Platform (Criterion)
+# LLM Evaluation Platform (Criterion)
 
 A REST API for evaluating LLM outputs. Agents call the API to run evals, compare models, and diagnose failures.
 

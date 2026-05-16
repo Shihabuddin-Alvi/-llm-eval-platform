@@ -33,7 +33,7 @@ def log(test_name, success, detail=""):
 def post_job(payload, timeout=TIMEOUT):
     return httpx.post(f"{BASE_URL}/jobs", json=payload, timeout=timeout)
 
-def job(prediction, reference, grader="exact_match", model="suite-v3", input_text="Q"):
+def job(prediction, reference, grader="exact_match", model="gemini-flash", input_text="Q"):
     return {"input": input_text, "prediction": prediction,
             "reference": reference, "grader_name": grader, "model_name": model}
 
@@ -186,7 +186,7 @@ async def fire_jobs(n, grader="exact_match"):
                 "prediction": "Paris",
                 "reference": "Paris",
                 "grader_name": grader,
-                "model_name": "concurrency-test"
+                "model_name": "llama3"
             }) for i in range(n)
         ]
         return await asyncio.gather(*tasks, return_exceptions=True)
@@ -223,7 +223,7 @@ async def fire_mixed(n=20):
                 "prediction": "Paris",
                 "reference": "Paris",
                 "grader_name": graders[i % 3],
-                "model_name": "mixed-test"
+                "model_name": "gpt-4o"
             }) for i in range(n)
         ]
         return await asyncio.gather(*tasks, return_exceptions=True)
@@ -261,7 +261,7 @@ except Exception as e:
 # Batch 100 jobs
 try:
     batch = [{"input": f"Q{i}", "prediction": "Paris", "reference": "Paris",
-              "grader_name": "exact_match", "model_name": "batch-100"}
+              "grader_name": "exact_match", "model_name": "gpt-4o"}
              for i in range(100)]
     start = time.time()
     r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, timeout=120)
@@ -276,7 +276,7 @@ except Exception as e:
 try:
     graders = ["exact_match", "contains_match", "regex_match"]
     batch = [{"input": f"Q{i}", "prediction": "Paris", "reference": "Paris",
-              "grader_name": graders[i % 3], "model_name": "batch-mixed"}
+              "grader_name": graders[i % 3], "model_name": "claude-3"}
              for i in range(30)]
     r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, timeout=120)
     data = r.json()
@@ -288,7 +288,7 @@ except Exception as e:
 # Batch performance under 10s
 try:
     batch = [{"input": f"Q{i}", "prediction": "Paris", "reference": "Paris",
-              "grader_name": "exact_match", "model_name": "perf-test"}
+              "grader_name": "exact_match", "model_name": "gemini-flash"}
              for i in range(50)]
     start = time.time()
     r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, timeout=60)

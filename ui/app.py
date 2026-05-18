@@ -1,7 +1,9 @@
 import streamlit as st
 import httpx
 import os
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+API_URL = "https://criterion-api-c7mf.onrender.com"
+API_KEY = os.getenv("CRITERION_API_KEY", "")
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 st.set_page_config(page_title="Criterion", layout="wide")
 
@@ -165,7 +167,7 @@ if page == "Submit Evaluation":
                 "grader_name": grader,
                 "model_name": model_name or "unknown"
             }
-            res = httpx.post(f"{API_URL}/jobs", json=payload)
+            res = httpx.post(f"{API_URL}/jobs", json=payload, headers=HEADERS)
             data = res.json()
             score = data.get("score", 0)
             passed = data.get("passed", False)
@@ -186,7 +188,7 @@ if page == "Submit Evaluation":
 
 elif page == "History":
     st.markdown('<div class="page-title">History</div>', unsafe_allow_html=True)
-    res = httpx.get(f"{API_URL}/history")
+    res = httpx.get(f"{API_URL}/history", headers=HEADERS)
     history = res.json()
     if not history:
         st.info("No evaluations yet.")
@@ -222,7 +224,7 @@ elif page == "History":
 
 elif page == "Leaderboard":
     st.markdown('<div class="page-title">Leaderboard</div>', unsafe_allow_html=True)
-    res = httpx.get(f"{API_URL}/jobs/leaderboard")
+    res = httpx.get(f"{API_URL}/jobs/leaderboard", headers=HEADERS)
     board = res.json()
     if not board:
         st.info("No models on the leaderboard yet.")

@@ -9,8 +9,13 @@ import asyncio
 import time
 import json
 import re
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 BASE_URL = "https://criterion-api-c7mf.onrender.com"
+API_KEY = os.getenv("CRITERION_API_KEY", "")
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 TIMEOUT = 60
 
 passed = 0
@@ -30,8 +35,9 @@ def log(test_name, success, detail=""):
     if detail:
         print(f"         {detail}")
 
-def post_job(payload, timeout=TIMEOUT):
-    return httpx.post(f"{BASE_URL}/jobs", json=payload, timeout=timeout)
+def post_job(payload, headers=None, timeout=TIMEOUT):
+    h = headers if headers is not None else HEADERS
+    return httpx.post(f"{BASE_URL}/jobs", json=payload, headers=h, timeout=timeout)
 
 def job(prediction, reference, grader="exact_match", model="gemini-flash", input_text="Q"):
     return {"input": input_text, "prediction": prediction,
@@ -45,7 +51,7 @@ print("="*60 + "\n")
 # ── HEALTH ────────────────────────────────────────────────────
 print("[ Health ]")
 try:
-    r = httpx.get(f"{BASE_URL}/health", timeout=TIMEOUT)
+    r = httpx.get(f"{BASE_URL}/health", headers=HEADERS, timeout=TIMEOUT)
     log("API is live and healthy", r.status_code == 200)
 except Exception as e:
     log("API is live and healthy", False, str(e))
@@ -179,7 +185,7 @@ except Exception as e:
 print("\n[ Concurrency and SQLite — 8 Tests ]")
 
 async def fire_jobs(n, grader="exact_match"):
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT, headers=HEADERS) as client:
         tasks = [
             client.post(f"{BASE_URL}/jobs", json={
                 "input": f"concurrent-{i}",
@@ -216,7 +222,7 @@ except Exception as e:
 # Mixed graders concurrent
 async def fire_mixed(n=20):
     graders = ["exact_match", "contains_match", "regex_match"]
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT, headers=HEADERS) as client:
         tasks = [
             client.post(f"{BASE_URL}/jobs", json={
                 "input": f"mixed-{i}",
@@ -264,7 +270,7 @@ try:
               "grader_name": "exact_match", "model_name": "gpt-4o"}
              for i in range(100)]
     start = time.time()
-    r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, timeout=120)
+    r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, headers=HEADERS, timeout=120)
     elapsed = round(time.time() - start, 2)
     data = r.json()
     log("POST /jobs/batch handles 100 jobs",
@@ -278,7 +284,7 @@ try:
     batch = [{"input": f"Q{i}", "prediction": "Paris", "reference": "Paris",
               "grader_name": graders[i % 3], "model_name": "claude-3"}
              for i in range(30)]
-    r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, timeout=120)
+    r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, headers=HEADERS, timeout=120)
     data = r.json()
     log("batch with mixed grader types all return scores",
         all("score" in j for j in data), f"{len(data)} results returned")
@@ -291,7 +297,7 @@ try:
               "grader_name": "exact_match", "model_name": "gemini-flash"}
              for i in range(50)]
     start = time.time()
-    r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, timeout=60)
+    r = httpx.post(f"{BASE_URL}/jobs/batch", json=batch, headers=HEADERS, timeout=60)
     elapsed = round(time.time() - start, 2)
     log("50 batch exact_match jobs complete under 10 seconds",
         elapsed < 10, f"elapsed={elapsed}s")
@@ -305,7 +311,7 @@ print("\n[ Negative API Tests — 8 Tests ]")
 try:
     r = httpx.post(f"{BASE_URL}/jobs",
                    json={"input": "Q", "reference": "Paris", "grader_name": "exact_match"},
-                   timeout=TIMEOUT)
+                   headers=HEADERS, timeout=TIMEOUT)
     log("missing prediction field returns 422", r.status_code == 422, f"status={r.status_code}")
 except Exception as e:
     log("missing prediction field returns 422", False, str(e))
@@ -314,14 +320,14 @@ except Exception as e:
 try:
     r = httpx.post(f"{BASE_URL}/jobs",
                    json={"input": "Q", "prediction": "Paris", "grader_name": "exact_match"},
-                   timeout=TIMEOUT)
+                   headers=HEADERS, timeout=TIMEOUT)
     log("missing reference field returns 422", r.status_code == 422, f"status={r.status_code}")
 except Exception as e:
     log("missing reference field returns 422", False, str(e))
 
 # Empty JSON
 try:
-    r = httpx.post(f"{BASE_URL}/jobs", json={}, timeout=TIMEOUT)
+    r = httpx.post(f"{BASE_URL}/jobs", json={}, headers=HEADERS, timeout=TIMEOUT)
     log("empty JSON body returns 422", r.status_code == 422, f"status={r.status_code}")
 except Exception as e:
     log("empty JSON body returns 422", False, str(e))
@@ -338,7 +344,7 @@ except Exception as e:
 
 # Non-existent job ID
 try:
-    r = httpx.get(f"{BASE_URL}/jobs/999999999", timeout=TIMEOUT)
+    r = httpx.get(f"{BASE_URL}/jobs/999999999", headers=HEADERS, timeout=TIMEOUT)
     log("non-existent job_id returns 404", r.status_code == 404, f"status={r.status_code}")
 except Exception as e:
     log("non-existent job_id returns 404", False, str(e))
@@ -368,7 +374,7 @@ except Exception as e:
 try:
     r = httpx.post(f"{BASE_URL}/jobs",
                    content="not json at all",
-                   headers={"Content-Type": "text/plain"},
+                   headers={"Content-Type": "text/plain", "Authorization": f"Bearer {API_KEY}"},
                    timeout=TIMEOUT)
     log("plain text body returns 422 not 500",
         r.status_code in [422, 400], f"status={r.status_code}")
@@ -379,14 +385,14 @@ except Exception as e:
 print("\n[ Leaderboard and DB — 4 Tests ]")
 
 try:
-    r = httpx.get(f"{BASE_URL}/jobs/leaderboard", timeout=TIMEOUT)
+    r = httpx.get(f"{BASE_URL}/jobs/leaderboard", headers=HEADERS, timeout=TIMEOUT)
     board = r.json()
     log("leaderboard returns list", isinstance(board, list), f"{len(board)} models")
 except Exception as e:
     log("leaderboard returns list", False, str(e))
 
 try:
-    r = httpx.get(f"{BASE_URL}/jobs/leaderboard", timeout=TIMEOUT)
+    r = httpx.get(f"{BASE_URL}/jobs/leaderboard", headers=HEADERS, timeout=TIMEOUT)
     board = r.json()
     if len(board) >= 2:
         runs = [m["total_runs"] for m in board]
@@ -402,7 +408,7 @@ try:
     model = "tie-breaker-test"
     for pred, ref in [("Paris", "Paris"), ("Paris", "Paris"), ("London", "Paris")]:
         post_job(job(pred, ref, model=model))
-    r = httpx.get(f"{BASE_URL}/jobs/leaderboard", timeout=TIMEOUT)
+    r = httpx.get(f"{BASE_URL}/jobs/leaderboard", headers=HEADERS, timeout=TIMEOUT)
     board = r.json()
     row = next((m for m in board if m["model_name"] == model), None)
     log("leaderboard math: 2/3 pass = 66.7% pass rate",
@@ -412,7 +418,7 @@ except Exception as e:
     log("leaderboard math: 2/3 pass = 66.7% pass rate", False, str(e))
 
 try:
-    r = httpx.get(f"{BASE_URL}/history", timeout=TIMEOUT)
+    r = httpx.get(f"{BASE_URL}/history", headers=HEADERS, timeout=TIMEOUT)
     history = r.json()
     required = ["score", "prediction", "grader_name", "model_name", "created_at"]
     has_all = all(all(k in entry for k in required) for entry in history[:5])
@@ -426,7 +432,7 @@ print("\n[ Clustering — 4 Tests ]")
 
 try:
     r = httpx.post(f"{BASE_URL}/jobs/failures/cluster",
-                   json=["only one failure"], timeout=TIMEOUT)
+                   json=["only one failure"], headers=HEADERS, timeout=TIMEOUT)
     log("cluster handles single text without crashing",
         r.status_code == 200, f"status={r.status_code}")
 except Exception as e:
@@ -435,7 +441,7 @@ except Exception as e:
 try:
     identical = ["the model failed"] * 5
     r = httpx.post(f"{BASE_URL}/jobs/failures/cluster",
-                   json=identical, timeout=TIMEOUT)
+                   json=identical, headers=HEADERS, timeout=TIMEOUT)
     data = r.json()
     log("cluster handles identical texts without crashing",
         r.status_code == 200 and len(data) == 5,
@@ -453,7 +459,7 @@ try:
         "model returned null",
     ]
     r = httpx.post(f"{BASE_URL}/jobs/failures/cluster",
-                   json=texts, timeout=TIMEOUT)
+                   json=texts, headers=HEADERS, timeout=TIMEOUT)
     data = r.json()
     clusters = set(c["cluster"] for c in data)
     log("cluster produces multiple groups from diverse failures",
@@ -463,7 +469,7 @@ except Exception as e:
 
 try:
     r = httpx.post(f"{BASE_URL}/jobs/failures/cluster?n_clusters=100",
-                   json=["text1", "text2", "text3"], timeout=TIMEOUT)
+                   json=["text1", "text2", "text3"], headers=HEADERS, timeout=TIMEOUT)
     log("cluster caps n_clusters to len(texts) gracefully",
         r.status_code == 200, f"status={r.status_code}")
 except Exception as e:

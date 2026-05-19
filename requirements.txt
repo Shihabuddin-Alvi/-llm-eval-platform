@@ -6,7 +6,5 @@ streamlit
 requests
 pytest
 httpx
-sentence-transformers
 scikit-learn
-mcpgroq
 groq

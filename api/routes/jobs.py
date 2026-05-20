@@ -4,6 +4,10 @@ from core.models import EvalJob
 from fastapi import BackgroundTasks
 from core.runner import run_eval, get_db_connection, create_async_job, update_job_with_result
 from core.clustering import cluster_failures as do_cluster
+from fastapi import UploadFile, File
+import csv
+import json
+import io
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -70,6 +74,32 @@ def cleanup_test_data():
     conn.commit()
     conn.close()
     return {"deleted": noise}
+@router.post("/upload")
+async def upload_eval_file(file: UploadFile = File(...)):
+    content = await file.read()
+    text = content.decode("utf-8")
+    jobs = []
+
+    if file.filename.endswith(".csv"):
+        reader = csv.DictReader(io.StringIO(text))
+        for row in reader:
+            jobs.append(EvalJob(
+                input=row.get("input", ""),
+                prediction=row["prediction"],
+                reference=row["reference"],
+                grader_name=row.get("grader_name", "exact_match"),
+                model_name=row.get("model_name", "unknown")
+            ))
+    elif file.filename.endswith(".jsonl"):
+        for line in text.strip().split("\n"):
+            if line:
+                data = json.loads(line)
+                jobs.append(EvalJob(**data))
+    else:
+        raise HTTPException(status_code=400, detail="Only .csv and .jsonl files are supported")
+
+    results = [run_eval(job) for job in jobs]
+    return results
 
 @router.get("/{job_id}")
 def get_job(job_id: int):

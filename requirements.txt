@@ -8,3 +8,4 @@ pytest
 httpx
 scikit-learn
 groq
+python-multipart

@@ -1,6 +1,7 @@
 import streamlit as st
 import httpx
 import os
+
 API_URL = "https://criterion-api-c7mf.onrender.com"
 API_KEY = os.getenv("CRITERION_API_KEY", "")
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
@@ -139,7 +140,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-page = st.sidebar.radio("Navigate", ["Submit Evaluation", "History", "Leaderboard"])
+page = st.sidebar.radio("Navigate", [
+    "Submit Evaluation",
+    "History",
+    "Leaderboard",
+    "Failure Clusters",
+    "Upload File"
+])
 
 st.markdown("""
 <div style='font-size:2.8rem; font-weight:900; color:#9b2c2c; letter-spacing:5px; margin-bottom:0.75rem;'>
@@ -254,3 +261,64 @@ elif page == "Leaderboard":
 
         with st.expander("Full table"):
             st.dataframe(board, use_container_width=True)
+
+elif page == "Failure Clusters":
+    st.markdown('<div class="page-title">Failure Clusters</div>', unsafe_allow_html=True)
+    st.markdown("Paste failure texts below, one per line. Criterion will group them by pattern.")
+    raw = st.text_area("Failure texts", height=200, placeholder="model returned empty\nno output generated\nwrong answer given")
+    n_clusters = st.slider("Number of clusters", min_value=2, max_value=10, value=3)
+
+    if st.button("RUN CLUSTERING"):
+        texts = [t.strip() for t in raw.strip().split("\n") if t.strip()]
+        if len(texts) < 2:
+            st.warning("Enter at least 2 failure texts.")
+        else:
+            res = httpx.post(
+                f"{API_URL}/jobs/failures/cluster",
+                json=texts,
+                headers=HEADERS,
+                params={"n_clusters": n_clusters},
+                timeout=30
+            )
+            data = res.json()
+            clusters = {}
+            for item in data:
+                c = item["cluster"]
+                clusters.setdefault(c, []).append(item["text"])
+            for cluster_id, items in sorted(clusters.items()):
+                st.markdown(f"**Cluster {cluster_id + 1}**")
+                for item in items:
+                    st.markdown(f"- {item}")
+
+elif page == "Upload File":
+    st.markdown('<div class="page-title">Upload File</div>', unsafe_allow_html=True)
+    st.markdown("Upload a CSV or JSONL file to run batch evaluations.")
+    uploaded = st.file_uploader("Choose a file", type=["csv", "jsonl"])
+
+    if uploaded is not None:
+        if st.button("RUN BATCH EVAL"):
+            res = httpx.post(
+                f"{API_URL}/jobs/upload",
+                headers=HEADERS,
+                files={"file": (uploaded.name, uploaded.getvalue(), "multipart/form-data")},
+                timeout=60
+            )
+            data = res.json()
+            st.markdown(f"**{len(data)} results**")
+            for r in data:
+                passed = r.get("passed", False)
+                score = r.get("score", 0)
+                color = "#9b2c2c" if passed else "#64748b"
+                verdict = "PASS" if passed else "FAIL"
+                st.markdown(f"""
+                <div class="history-card">
+                    <div>
+                        <div style="font-weight:700; color:#2c3e50;">{r.get('prediction', '')[:60]}</div>
+                        <div style="font-size:0.8rem; color:#94a3b8;">{r.get('grader', '')} · ref: {r.get('reference', '')[:40]}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:1.6rem; font-weight:900; color:{color};">{score}</div>
+                        <div style="font-size:0.68rem; font-weight:700; color:{color};">{verdict}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
